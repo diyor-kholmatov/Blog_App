@@ -1,74 +1,142 @@
-from apps.account.models import CustomUser
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework import serializers
 from django.contrib.auth import authenticate
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
+from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 
-class CategorySerializer(serializers.ModelSerializer):
+from apps.account.models import User
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(min_length=6, max_length=60, write_only=True)
+    password2 = serializers.CharField(min_length=6, max_length=60, write_only=True)
+
     class Meta:
-        model = CustomUser
-        fields = ('id', 'username')
-class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
-
-    @classmethod
-    def get_token(cls, user):
-        token = super(MyTokenObtainPairSerializer, cls).get_token(user)
-
-        # Add custom claims
-        token['username'] = user.username
-        return token
-
-
-
-class RegistrationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CustomUser
-        fields = ('email', 'password',  'username',  'first_name', 'last_name', 'birthday', 'image', )
-        extra_kwargs = {'password': {'write_only': True},
-                        'first_name':{'required': True},
-                        'last_name':{'required': True}
-                        }
+        model = User
+        fields = ('id', 'first_name', 'last_name', 'email', 'username', 'password', 'password2')
 
     def validate(self, attrs):
-        if attrs['password'] != attrs['password']:
-            raise serializers.ValidationError({"password": "Password fields didn't match."})
+        password = attrs.get('password')
+        password2 = attrs.get('password2')
+
+        if password != password2:
+            raise serializers.ValidationError({'success': True, 'message': 'Password did not match, please try again'})
         return attrs
 
-
     def create(self, validated_data):
-        user = CustomUser(
-            email=validated_data['email'],
-            username=validated_data['username'],
-            first_name=validated_data['first_name'],
-            last_name=validated_data['last_name'],
-            birthday=validated_data['birthday'],
-            image=validated_data['image'],
+        del validated_data['password2']
+        return User.objects.create_user(**validated_data)
 
-        )
-        user.set_password(validated_data['password'])
+
+class LoginSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(max_length=101, required=True)
+    password = serializers.CharField(max_length=68, write_only=True)
+    token = serializers.SerializerMethodField(read_only=True)
+
+    def get_token(self, obj):
+        user = User.objects.filter(email=obj.get('email')).first()
+        return user.token
+
+    class Meta:
+        model = User
+        fields = ('email', 'password', 'token')
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        password = attrs.get('password')
+        user = authenticate(email=email, password=password)
+        if not user:
+            raise AuthenticationFailed({
+                'message': 'Invalid email or password'
+            })
+        if not user.is_active:
+            raise AuthenticationFailed({'message': 'Account disabled'})
+
+        data = {
+            'success': True,
+            'email': user.email,
+            'token': user.token,
+        }
+        return data
+
+
+class EmailVerificationSerializer(serializers.ModelSerializer):
+    token = serializers.CharField(max_length=505)
+
+    class Meta:
+        model = User
+        fields = ('token', )
+
+
+class ResetPasswordSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField()
+
+    class Meta:
+        model = User
+        fields = ('email', )
+
+
+class SetNewPasswordSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(min_length=6, max_length=66, write_only=True)
+    password2 = serializers.CharField(min_length=6, max_length=66, write_only=True)
+    uidb64 = serializers.CharField(max_length=69, required=True)
+    token = serializers.CharField(max_length=505, required=True)
+
+    class Meta:
+        model = User
+        fields = ('password', 'password2', 'uidb64', 'token')
+
+    def validate(self, attrs):
+        password = attrs.get('password')
+        password2 = attrs.get('password2')
+        uidb64 = attrs.get('uidb64')
+        token = attrs.get('token')
+        _id = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.filter(id=_id).first()
+        if not PasswordResetTokenGenerator.check_token(user, token):
+            raise AuthenticationFailed({'success': False, 'message': 'The token is not valid'})
+        if password != password2:
+            raise serializers.ValidationError({
+                'success': False, 'message': 'Password did not match, please try again'
+            })
+        user.set_password(password)
         user.save()
-
         return user
 
 
+class ChangeNewPasswordSerializer(serializers.ModelSerializer):
+    old_password = serializers.CharField(min_length=6, max_length=64, write_only=True)
+    password = serializers.CharField(min_length=6, max_length=64, write_only=True)
+    password2 = serializers.CharField(min_length=6, max_length=64, write_only=True)
 
+    class Meta:
+        model = User
+        fields = ('old_password', 'password' 'password2')
 
-class CustomUserLoginSerializer(serializers.Serializer):
+    def validate(self, attrs):
+        old_password = attrs.get('old_password')
+        password = attrs.get('password')
+        password2 = attrs.get('password2')
+        request = self.context.get('request')
+        user = request.user
+        if not user.check_password(old_password):
+            raise serializers.ValidationError({
+                'success': False, 'message': 'Old password did not match, please try again'
+            })
+        if password != password2:
+            raise serializers.ValidationError({
+                'success': False, 'message': 'Password did not match, please try again'
+            })
+        user.set_password(password)
+        user.save()
+        return attrs
 
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True)
-
-    def validate(self, data):
-        email = data.get('email')
-        password = data.get('password')
-
-        if email and password:
-            user = authenticate(email=email, password=password)
-
-            if user:
-                if not user.is_active:
-                    raise serializers.ValidationError("User account is disabled.")
-                return {'user': user}
-            else:
-                raise serializers.ValidationError("Unable to log in with provided credentials.")
-        else:
-            raise serializers.ValidationError("Must provide both email and password.")
+class AccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            'id', 'email', 'username', 'first_name', 'last_name',
+            'bio',
+            'image',
+            )

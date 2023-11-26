@@ -1,8 +1,14 @@
 from django.urls import path
-from .views import RegistrationView, MyObtainTokenPairView, CategoryListView
+
+from . import views
 
 urlpatterns = [
-    path('register/', RegistrationView.as_view(), name='user-registration'),
-    path('login/', MyObtainTokenPairView.as_view(), name='user-login'),
-    path('test/', CategoryListView.as_view(), name='test'),
+    path('register/', views.AccountRegisterAPIView.as_view()),
+    path('verify-email/', views.EmailVerificationAPIView.as_view()),
+    path('login/', views.LoginAPIView.as_view()),
+    path('reset-password/', views.ResetPasswordAPIView.as_view()),
+    path('set-password-confirm/<str:uidb64>/<str:token>/', views.SetPasswordConfirmAPIView.as_view()),
+    path('set-password-completed/', views.SetNewPasswordCompletedAPIView.as_view()),
+    path('profile/<str:email>/', views.MyAccountAPIView.as_view()),
+
 ]
