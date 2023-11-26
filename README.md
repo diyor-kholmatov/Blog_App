@@ -14,17 +14,12 @@ the user to make **custom changes** in his blog
 
 
 
-1. **Signup page**
-   ![Signup page](screenshots/1.png)
 
-2. **Main page**
-   ![Main page](screenshots/2.png)
 
-3. **Page after signup or login**
-   ![Page after signup or login](screenshots/3.png)
-
-4. **Profile page**
-   ![Profile page](screenshots/4.png)
-
-5. **Article page**
-   ![Article page](screenshots/5.png)
+| Name                       | Screenshots                                   |
+|----------------------------|-----------------------------------------------|
+| **Signup Page**            | ![Signup Page](screenshots/1.png)             |
+| **Main Page**              | ![Main Page](screenshots/2.png)               |
+| **Page After Signup/Login** | ![Page After Signup/Login](screenshots/3.png) |
+| **Profile Page**           | ![Profile Page](screenshots/4.png)            |
+| **Article Page**           | ![Article Page](screenshots/5.png)            |
